@@ -2,11 +2,10 @@ import rasterio
 import numpy as np
 from rasterio.mask import mask
 from shapely.wkt import loads as wkt_loads
-from shapely.geometry import Polygon
 import os
 import pandas as pd
 from pyproj import Proj, transform
-
+from pyproj import Proj, Transformer
 def extract_pixel_coords(input_tif_path, geometry, target_crs="EPSG:4326", nodata = -9999):
     with rasterio.open(input_tif_path) as src:
         src_crs = src.crs
@@ -33,7 +32,38 @@ def extract_pixel_coords(input_tif_path, geometry, target_crs="EPSG:4326", nodat
 
         return x, y, values
 
-### --9999 no datta
+def find_matching_tif_files(index_csv_path, input_wkt, input_crs = 4326):
+    # Read the CSV with the index of geometries and files
+    df = pd.read_csv(index_csv_path, delimiter=';')
+    
+    input_geometry = wkt_loads(input_wkt)    
+    matching_files = []
+
+    for _, row in df.iterrows():
+        row_geometry = wkt_loads(row['Geometry4326'])
+        row_crs = row['SRID']
+
+        if row_crs != input_crs:
+            # Use pyproj to transform CRS if they are different
+            transformer = Transformer.from_crs(row_crs, 4326, always_xy=True)
+            transformed_geom = row_geometry
+            # Assuming row_geometry is a shapely geometry, transform its coordinates
+            transformed_coords = [transformer.transform(x, y) for x, y in zip(row_geometry.xy[0], row_geometry.xy[1])]
+            transformed_geom = row_geometry.__class__(transformed_coords)  # Create a new geometry from transformed coordinates
+        else:
+            transformed_geom = row_geometry
+
+        # Check if the input geometry intersects with the transformed geometry
+        if input_geometry.intersects(transformed_geom):
+            matching_files.append(row['FileName'])
+
+    if matching_files:
+        return matching_files
+    else:
+        print("No matching files found.")
+        return []
+
+#No Indexing by default
 def output_from_attr(input_dir, geometry, depth_range, attribute_list=[], num_samples=0, output_name='output'):
     output_df = pd.DataFrame({'x': [], 'y': []})
     
@@ -79,6 +109,10 @@ def output_from_attr(input_dir, geometry, depth_range, attribute_list=[], num_sa
             print(f"No valid directories found for attribute '{layer}' within the specified depth range.")
 
     output_df = output_df.dropna().reset_index(drop=True)
+    output_df = output_df.dropna().reset_index(drop=True)
+    if len(attribute_list) <= 1:
+        #if one attribute (this is done so choose_points algoirthm works, as it was not designed to do such)
+        output_df[str(attribute_list[-1]) + '_dup'] = output_df.iloc[:, -1]
     if num_samples > 0 and len(output_df) >= num_samples:
         output_df.to_csv(output_name + '.csv', index=False)
         return output_df

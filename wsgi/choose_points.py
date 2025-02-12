@@ -167,6 +167,9 @@ def iter_combinations(num_combs=np.nan, filtered_distances = None, filtered_indi
 
     return combinations
 
+#outlier technique is important, so is scaler, we need a way to analyze scatter plot distribution so the scaler and outlier don't need to be chosen by the user
+#scalar_scheme can be: StandardScaler, RobustScaler, PowerTransformer
+#outlier tecnhique can be: IQR Thresholding, Mahalanobis Distance, Elliptic Envelope
 def select_points(df, num_samples=10, epsg_code = 32618, scalar_scheme = 'StandardScaler', outlier_technique = 'IQR Thresholding',weight = 0.5, Morgans = False, output_name = 'results'):
     Sample_IDx_FID = list(range(len(df)))
     lat = df.columns[0]
@@ -404,7 +407,7 @@ def select_points(df, num_samples=10, epsg_code = 32618, scalar_scheme = 'Standa
             if score > final_score:
                 final_score = score
                 final_result = idx
-    ndf = pd.DataFrame(Geo_space_XY[final_result], columns=[lat, lon])
+    ndf = pd.DataFrame(Geo_space_XY[final_result].reshape(-1, 2), columns=[lat, lon])
     ndf.to_csv(f"{output_name}.csv", index=None)
     return ndf
 
