@@ -37,7 +37,11 @@ def output_from_attr(input_dir, geometry, depth_range, attribute_list=[], num_sa
     output_df = pd.DataFrame({'x': [], 'y': []})
     import soil
     for layer in attribute_list:
-        matching_subdirs = soil.get_matching_subdirectories(input_dir, depth_range, layer)
+        try:
+            matching_subdirs = soil.get_matching_subdirectories(input_dir, depth_range, layer)
+        except FileNotFoundError as e:
+            print(f"No data for attribute '{layer}': {e}")
+            return pd.DataFrame()
         explore_depths_list = [
                                   (name, int(yyy) - int(xxx))
                                   for name in matching_subdirs
@@ -67,6 +71,11 @@ def output_from_attr(input_dir, geometry, depth_range, attribute_list=[], num_sa
                             combined_values[point_key] = pixel_values[i] * factor
                 
                 total_factor += factor
+
+            if not combined_values:
+                # No raster overlaps the geometry, so no point can have a value for every attribute
+                print(f"No data found for attribute '{layer}' within the query geometry.")
+                return pd.DataFrame()
 
             combined_df = pd.DataFrame(
                 [(x, y, value / total_factor) for (x, y), value in combined_values.items()],

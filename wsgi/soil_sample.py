@@ -133,6 +133,19 @@ def process_request(query_params, query_geometry):
     )
     print(f"[SAMPLE_DEBUG] After output_from_attr: df shape={df.shape}, columns={list(df.columns)}", file=sys.stderr)
 
+    if df.empty:
+        import shapely.geometry
+        response = make_response(jsonify({
+            "query": shapely.geometry.mapping(query_geometry),
+            "message": "No soil data found for the given geometry, depth, and layers.",
+            "results": [],
+            "statistics": {"layers": {}}
+        }), 404)
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response
+
     # Choose what points to use
     sample_df = select_points(df, num_samples=num_points, epsg_code=4326)
     print(f"[SAMPLE_DEBUG] After select_points: sample_df shape={sample_df.shape}, requested={num_points}, actual={len(sample_df)}", file=sys.stderr)

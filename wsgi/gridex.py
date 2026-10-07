@@ -90,6 +90,8 @@ def create_index(directory):
                     # Transform the bounding box to EPSG:4326 for Geometry4326
                     source_srs = osr.SpatialReference()
                     source_srs.ImportFromWkt(dataset.GetProjection())
+                    # GDAL 3+ uses lat/lon order for EPSG:4326 unless told otherwise
+                    source_srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
 
                     target_srs = osr.SpatialReference()
                     target_srs.ImportFromEPSG(4326)
