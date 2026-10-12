@@ -7,59 +7,54 @@ so you only need a few POLARIS tiles to try it out.
 
 ## 1. Set up the Python environment (one time)
 
-### Use Python 3.11
+### Why the Python version matters
 
-The packages in `wsgi/requirements.txt` are pinned to versions that ship
-prebuilt wheels for Python **3.11** (3.12 and 3.13 should also work). Newer
-Python versions, such as 3.14, have no wheels for those versions. In that case
-pip tries to compile numpy, scipy and scikit-learn from source, and the install
-fails with errors like `Dependency "OpenBLAS" not found`. Check your version:
+The packages in `wsgi/requirements.txt` are pinned to exact versions, and those
+versions only work with Python **3.11, 3.12 or 3.13** (the project uses 3.11).
+The system `python3` is often outside that range, and pip then fails with a
+confusing error:
+
+| Your Python | What pip says |
+|-------------|---------------|
+| 3.10 or older | `Could not find a version that satisfies the requirement scipy==1.16.0` and `Requires-Python >=3.11` |
+| 3.14 or newer | It starts compiling numpy/scipy/scikit-learn and fails with `Dependency "OpenBLAS" not found`, `meson` or Fortran errors |
+
+To avoid this, the steps below use **[uv](https://docs.astral.sh/uv/)** to
+create the environment. uv downloads Python 3.11 by itself, so it works no
+matter which Python the machine has. It needs no root access and leaves the
+system Python untouched.
+
+### Install the prerequisites
+
+1. Install uv (skip if `uv --version` already works):
+
+   ```shell
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   ```
+
+   Open a new terminal afterwards so `uv` is on your `PATH`.
+
+2. Install the GDAL system library. The GDAL Python package is compiled
+   against it. On Ubuntu/Debian:
+
+   ```shell
+   sudo apt install libgdal-dev gdal-bin
+   ```
+
+   On macOS, use `brew install gdal`.
+
+### Create the environment and install the packages
+
+From the repository root:
 
 ```shell
-python3 --version
-```
-
-If it is not 3.11–3.13, do not use the system `python3`. Install Python 3.11
-next to it with one of these tools (no root needed, and the system Python is
-not touched):
-
-- **[uv](https://docs.astral.sh/uv/)** (recommended):
-  `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- **pyenv**: `pyenv install 3.11`
-
-### Install the GDAL system library
-
-The GDAL Python package compiles against the system GDAL library. On
-Ubuntu/Debian:
-
-```shell
-sudo apt install libgdal-dev gdal-bin
-```
-
-On macOS, use `brew install gdal`.
-
-### Create the virtual environment
-
-From the repository root, create the environment with **one** of these
-options:
-
-```shell
-# Option A: uv (downloads Python 3.11 automatically if needed)
+# Create the environment with Python 3.11 (uv downloads it if needed)
 uv venv --python 3.11 --seed ffnenv
-
-# Option B: pyenv
-"$(pyenv root)/versions/$(pyenv latest 3.11)/bin/python" -m venv ffnenv
-
-# Option C: your system python3 is already 3.11-3.13
-#           (on Ubuntu/Debian first run: sudo apt install python3-venv python3-dev)
-python3 -m venv ffnenv
-```
-
-Then activate it and install the packages:
-
-```shell
 source ffnenv/bin/activate      # run this again in every new terminal
-python --version                # must print 3.11.x (or 3.12/3.13)
+
+# Stop here if the environment does not have the right Python version
+python -c 'import sys; v = sys.version_info[:2]; print("Python %d.%d" % v); assert (3, 11) <= v <= (3, 13), "Wrong Python version, see step 1"'
+
 pip install --upgrade pip
 
 # Install everything except GDAL, preferring prebuilt wheels
@@ -72,23 +67,30 @@ pip install "gdal==$(gdal-config --version)"
 
 Notes:
 
-- On Python 3.11 every heavy package (numpy, scipy, scikit-learn, rasterio,
-  ...) installs from a prebuilt wheel. Only small pure-Python packages such as
-  `spint` are built locally, which is quick. If pip starts compiling numpy or
-  scipy, or reports errors about OpenBLAS, a Fortran compiler or `meson`, your
-  environment is using the wrong Python version. Delete it and start this step
-  over.
-- GDAL is installed on its own because the Python package must have the same
+- If the version check fails, or pip shows either error from the table above,
+  delete the environment and start over: `deactivate; rm -rf ffnenv`. The most
+  common cause is an older `ffnenv` folder created with the system `python3`.
+  `uv venv` creates the environment again from scratch.
+- On Python 3.11, every heavy package (numpy, scipy, scikit-learn, rasterio,
+  ...) installs from a prebuilt wheel. Only GDAL and small pure-Python packages
+  such as `spint` are built locally.
+- GDAL is installed separately because the Python package must have the same
   version as the system library, and the version pinned in `requirements.txt`
-  may not match yours. This is the one package that is compiled locally, which
-  is why `libgdal-dev` is needed.
-- If a previous attempt failed, delete the environment and start over:
-  `deactivate; rm -rf ffnenv`.
+  may not match yours.
 - The `ffnenv/` folder is already in `.gitignore`. To leave the environment,
   run `deactivate`.
 
-If you already use conda, you can run
-`conda env create -f wsgi/environment.yml && conda activate ffnenv` instead.
+### Alternatives to uv
+
+These also work as long as the version check passes:
+
+- **System Python**, if `python3 --version` already shows 3.11–3.13. On
+  Ubuntu/Debian, first run `sudo apt install python3-venv python3-dev`, then
+  `python3 -m venv ffnenv`.
+- **pyenv**: `pyenv install 3.11`, then
+  `"$(pyenv root)/versions/$(pyenv latest 3.11)/bin/python" -m venv ffnenv`.
+- **conda**: `conda env create -f wsgi/environment.yml && conda activate ffnenv`.
+  This replaces the whole install block above, including GDAL.
 
 ## 2. Create the config file (one time)
 
