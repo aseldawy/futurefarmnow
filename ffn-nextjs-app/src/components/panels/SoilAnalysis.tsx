@@ -54,7 +54,8 @@ export function SoilAnalysis() {
     setFarmlandGeoJSON,
     setNDVIImageOverlay,
     clearNDVICache,
-    clearTrigger
+    clearTrigger,
+    setSoilAnalysisResult
   } = useMapStore()
 
   const [results, setResults] = useState<any>(null)
@@ -166,6 +167,16 @@ export function SoilAnalysis() {
       if (data.results && Object.keys(data.results).length > 0) {
         setResults(data.results)
         setAnalysisType('polygon')
+        setSoilAnalysisResult({
+          layer: selectedSoilLayer,
+          depth: selectedSoilDepth,
+          mean: data.results.mean ?? null,
+          min: data.results.min ?? null,
+          max: data.results.max ?? null,
+          median: data.results.median ?? null,
+          stddev: data.results.stddev ?? null,
+          count: data.results.count ?? null,
+        })
         // Don't show success toast here - wait for image to complete
       } else {
         toast.error('No soil data available for the selected area')

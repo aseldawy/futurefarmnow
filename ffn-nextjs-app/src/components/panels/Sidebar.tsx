@@ -1,13 +1,15 @@
 'use client'
 
-import { X, ChevronLeft, ChevronRight, HelpCircle, MapPin, Trash2, Maximize2, Minimize2, BookOpen, Copy, Check } from 'lucide-react'
+import { X, ChevronLeft, ChevronRight, HelpCircle, MapPin, Trash2, Maximize2, Minimize2, BookOpen, Copy, Check, Home, Save } from 'lucide-react'
 import Image from 'next/image'
 import dynamic from 'next/dynamic'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { DatasetSelector } from './DatasetSelector'
+import { FarmPanel } from '@/components/farm/FarmPanel'
 import { useMapStore } from '@/lib/stores/mapStore'
+import { useFarmStore } from '@/lib/stores/farmStore'
 import { useState } from 'react'
 import { toast } from '@/lib/utils/toast'
 import { cn } from '@/lib/utils'
@@ -56,6 +58,7 @@ interface SidebarProps {
 
 export function Sidebar({ onClose, onShowHelp, onClearAnalysis, onStartTutorial }: SidebarProps) {
   const { activeTab, setActiveTab, drawnPolygon, drawnPolygons } = useMapStore()
+  const setIsAddingFarm = useFarmStore((s) => s.setIsAddingFarm)
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [isExpanded, setIsExpanded] = useState(true)
   const [copiedGeoJSON, setCopiedGeoJSON] = useState(false)
@@ -170,6 +173,20 @@ export function Sidebar({ onClose, onShowHelp, onClearAnalysis, onStartTutorial 
 
             {/* Action Buttons */}
             <div className="flex items-center space-x-1 flex-shrink-0">
+              {/* Save as Farm Button */}
+              {drawnPolygon && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsAddingFarm(true)}
+                  className="text-xs px-2 py-1 h-7"
+                  title="Save current area as a farm"
+                >
+                  <Save className="h-3 w-3 sm:mr-1" />
+                  <span className="hidden sm:inline">Save Farm</span>
+                </Button>
+              )}
+
               {/* Copy GeoJSON Button - only show when area is selected */}
               {drawnPolygon && (
                 <Button
@@ -240,6 +257,16 @@ export function Sidebar({ onClose, onShowHelp, onClearAnalysis, onStartTutorial 
             )}
           </div>
 
+          {/* Farms icon */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsCollapsed(false)}
+            title="My Farms"
+          >
+            <Home className="h-4 w-4" />
+          </Button>
+
           <Button
             variant="ghost"
             size="icon"
@@ -287,6 +314,11 @@ export function Sidebar({ onClose, onShowHelp, onClearAnalysis, onStartTutorial 
         </div>
       ) : (
         <>
+          {/* My Farms */}
+          <div id="sidebar-farm-panel" className="px-4 py-3">
+            <FarmPanel />
+          </div>
+
           {/* Dataset Selection */}
           <div className="px-4 py-3 border-b bg-muted/50" data-tutorial="dataset-selector">
             <DatasetSelector />

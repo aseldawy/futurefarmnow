@@ -9,26 +9,35 @@ import { Button } from '@/components/ui/button'
 import { Menu } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMapStore } from '@/lib/stores/mapStore'
+import { useFarmStore } from '@/lib/stores/farmStore'
 import { toast } from '@/lib/utils/toast'
 import { useURLSync } from '@/hooks/useURLSync'
+import { useWeather } from '@/hooks/useWeather'
 import { useTutorial } from '@/lib/contexts/TutorialContext'
+import { ChatWidget } from '@/components/ai/ChatWidget'
 
 export function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [helpModalOpen, setHelpModalOpen] = useState(false)
   const { clearArea, clearAllAnalysis } = useMapStore()
   const { startTutorial } = useTutorial()
-  
+  const selectFarm = useFarmStore((s) => s.selectFarm)
+
   // Initialize URL synchronization
   useURLSync()
 
+  // Initialize weather hook
+  useWeather()
+
   const handleClearArea = () => {
     clearArea()
+    selectFarm(null)
     toast.success('Area cleared! You can now draw a new area.')
   }
 
   const handleClearAnalysis = () => {
     clearAllAnalysis()
+    selectFarm(null)
     toast.success('All analysis results cleared!')
   }
 
@@ -86,6 +95,9 @@ export function MainLayout() {
 
       {/* Help Modal - Global */}
       <HelpModal isOpen={helpModalOpen} onClose={() => setHelpModalOpen(false)} />
+
+      {/* FarmBot AI Chat Widget */}
+      <ChatWidget />
     </div>
   )
 }
