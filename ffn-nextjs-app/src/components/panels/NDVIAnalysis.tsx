@@ -25,7 +25,8 @@ export function NDVIAnalysis() {
     setSoilImageOverlay,
     setFarmlandGeoJSON,
     setNDVIImageOverlay,
-    clearTrigger
+    clearTrigger,
+    setNdviAnalysisResult
   } = useMapStore()
 
   const [results, setResults] = useState<any>(null)
@@ -280,6 +281,17 @@ export function NDVIAnalysis() {
         setResults(resultsData)
         setFarmlandResults(null)
         setAnalyzingType(null)
+        if (Array.isArray(resultsData) && resultsData.length > 0) {
+          const ndviValues = resultsData.map((p: any) => p.mean).filter((v: any) => v != null)
+          setNdviAnalysisResult({
+            fromDate: selectedDateRange.from,
+            toDate: selectedDateRange.to,
+            averageNdvi: ndviValues.length ? Math.round((ndviValues.reduce((a: number, b: number) => a + b, 0) / ndviValues.length) * 1000) / 1000 : null,
+            maxNdvi: ndviValues.length ? Math.round(Math.max(...ndviValues) * 1000) / 1000 : null,
+            minNdvi: ndviValues.length ? Math.round(Math.min(...ndviValues) * 1000) / 1000 : null,
+            dataPoints: resultsData.length,
+          })
+        }
         const dataCount = Array.isArray(resultsData) ? resultsData.length : 0
         if (dataCount > 0) {
           toast.success(`Found crop health data for ${dataCount} time points!`)

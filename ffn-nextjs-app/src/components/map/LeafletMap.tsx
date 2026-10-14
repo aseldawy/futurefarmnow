@@ -4,10 +4,12 @@ import { useEffect, useRef, useState, memo } from 'react'
 import L from 'leaflet'
 import 'leaflet-draw'
 import { useMapStore } from '@/lib/stores/mapStore'
+import { useFarmStore } from '@/lib/stores/farmStore'
 import { useTheme } from '@/lib/contexts/ThemeContext'
 import { toast } from '@/lib/utils/toast'
 import { valueToGrayscale, ndviToColor } from '@/lib/utils/color'
 import { createSafePopupContent, formatNumber } from '@/lib/utils/sanitize'
+import { WeatherOverlay } from '@/components/weather/WeatherOverlay'
 
 // Fix for default markers in Leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl
@@ -30,6 +32,7 @@ function LeafletMapComponent() {
   const drawnItemsRef = useRef<L.FeatureGroup | null>(null)
   const tileLayerRef = useRef<L.TileLayer | null>(null)
   const farmlandValueMapRef = useRef<Map<string, any> | null>(null)
+  const farmPolygonsLayerRef = useRef<L.LayerGroup | null>(null)
   const isUpdatingFromURL = useRef(false)
   const hasCheckedURLCoordinates = useRef(false)
   const userMarkerTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -441,6 +444,11 @@ function LeafletMapComponent() {
         if (farmlandLayerRef.current) {
           mapInstanceRef.current.removeLayer(farmlandLayerRef.current)
           farmlandLayerRef.current = null
+        }
+
+        if (farmPolygonsLayerRef.current) {
+          mapInstanceRef.current.removeLayer(farmPolygonsLayerRef.current)
+          farmPolygonsLayerRef.current = null
         }
 
         if (drawnItemsRef.current) {
@@ -1095,9 +1103,66 @@ function LeafletMapComponent() {
     }
   }, [samplePoints])
 
+  // Render persistent farm polygons
+  const farms = useFarmStore((s) => s.farms)
+  const selectedFarmId = useFarmStore((s) => s.selectedFarmId)
+
+  useEffect(() => {
+    if (!mapInstanceRef.current) return
+
+    // Remove existing farm polygons layer
+    if (farmPolygonsLayerRef.current) {
+      mapInstanceRef.current.removeLayer(farmPolygonsLayerRef.current)
+      farmPolygonsLayerRef.current = null
+    }
+
+    if (farms.length === 0) return
+
+    const layerGroup = L.layerGroup()
+
+    farms.forEach((farm) => {
+      const isSelected = farm.id === selectedFarmId
+      try {
+        const geoLayer = L.geoJSON(farm.geometry as GeoJSON.GeoJsonObject, {
+          style: {
+            color: isSelected ? '#10b981' : '#9ca3af',
+            weight: isSelected ? 3 : 1.5,
+            opacity: isSelected ? 1 : 0.6,
+            fillOpacity: isSelected ? 0.05 : 0,
+            dashArray: isSelected ? undefined : '6 4',
+          },
+        })
+        geoLayer.bindTooltip(farm.name, {
+          permanent: false,
+          direction: 'center',
+          className: 'farm-tooltip',
+        })
+        layerGroup.addLayer(geoLayer)
+      } catch {
+        // Skip invalid geometries
+      }
+    })
+
+    layerGroup.addTo(mapInstanceRef.current)
+    farmPolygonsLayerRef.current = layerGroup
+
+    return () => {
+      if (layerGroup && mapInstanceRef.current) {
+        try {
+          mapInstanceRef.current.removeLayer(layerGroup)
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }, [farms, selectedFarmId])
+
   return (
     <div className="relative h-full w-full">
       <div ref={mapRef} className="h-full w-full" />
+
+      {/* Weather Overlay - positioned over map */}
+      <WeatherOverlay />
 
       {/* Location button */}
       <button

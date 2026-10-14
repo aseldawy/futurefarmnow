@@ -99,3 +99,58 @@
 .light-popup .leaflet-popup-tip {
   background-color: white !important;
 }
+
+/* Weather overlay animations */
+@keyframes weather-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes weather-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.weather-slide-in {
+  animation: weather-slide-in 0.2s ease-out;
+}
+
+.weather-fade-in {
+  animation: weather-fade-in 0.15s ease-out;
+}
+
+/* Farm tooltip style */
+.farm-tooltip {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 6px;
+}
+
+/* Scrollbar thin utility */
+.scrollbar-thin {
+  scrollbar-width: thin;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 2px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}

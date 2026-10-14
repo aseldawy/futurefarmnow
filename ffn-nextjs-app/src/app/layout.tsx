@@ -55,6 +55,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://b.basemaps.cartocdn.com" />
         <link rel="preconnect" href="https://c.basemaps.cartocdn.com" />
         <link rel="preconnect" href="https://raptor.cs.ucr.edu" />
+        <link rel="preconnect" href="https://api.weather.gov" />
         <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com" />
 
         {/* Favicon Links */}

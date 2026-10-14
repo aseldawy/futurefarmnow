@@ -47,6 +47,7 @@ from soil_stats import soil_stats_bp
 from soil_sample import soil_sample_bp
 from ndvi_timeseries import ndvi_timeseries_bp
 from app.et_map import etrawdata_bp
+from app.ai_assistant import ai_assistant_bp
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*", "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"], "allow_headers": "*"}})
@@ -56,6 +57,7 @@ app.register_blueprint(soil_stats_bp)
 app.register_blueprint(soil_sample_bp)
 app.register_blueprint(ndvi_timeseries_bp)
 app.register_blueprint(etrawdata_bp)
+app.register_blueprint(ai_assistant_bp)
 
 # Global error handler
 @app.errorhandler(Exception)

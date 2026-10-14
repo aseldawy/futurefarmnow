@@ -5,9 +5,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useMapStore } from '@/lib/stores/mapStore'
 import { apiClient } from '@/lib/api/client'
-import { AlertCircle, RefreshCw, Droplets, CheckCircle, Clock, XCircle, Download, History, ChevronDown, ChevronUp, Trash2, BarChart3, Share2 } from 'lucide-react'
+import { AlertCircle, RefreshCw, Droplets, CheckCircle, Clock, XCircle, Download, History, ChevronDown, ChevronUp, Trash2, BarChart3, Share2, Bot } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { GeoJSONGeometry, ETMapStatusResponse, ETMapStatus } from '@/lib/types/api'
+import { useChatStore } from '@/lib/stores/chatStore'
 import { cn } from '@/lib/utils'
 import { formatDateString, parseDate } from '@/lib/utils'
 
@@ -191,12 +192,33 @@ export function ETMapAnalysis() {
     setSelectedDateRange,
     setETMapImageOverlay,
     setETMapRequestId,
+    setEtmapAnalysisResult,
     etmapRequestId,
     clearTrigger,
     drawnItems,
     setDrawnPolygons,
     mapInstance
   } = useMapStore()
+
+  const { openChat, setPendingImage, setPendingMessage } = useChatStore()
+
+  const handleAnalyzeWithAI = async () => {
+    if (!requestId) return
+    try {
+      const blob = await apiClient.getETMapImage(requestId)
+      const file = new File([blob], 'et-map.png', { type: 'image/png' })
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const preview = e.target?.result as string
+        setPendingImage(file, preview)
+        setPendingMessage('Please evaluate my ET map and explain what the colors mean for my farm.')
+        openChat()
+      }
+      reader.readAsDataURL(blob)
+    } catch {
+      toast.error('Could not load ET map image for AI analysis')
+    }
+  }
 
   const [jobStatus, setJobStatus] = useState<ETMapStatusResponse | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -244,6 +266,7 @@ export function ETMapAnalysis() {
       setRequestId(null)
       setETMapRequestId(null)
       setETMapImageOverlay(null, null)
+      setEtmapAnalysisResult(null)
       setSelectedHistoryId(null)
       isPollingRef.current = false
       pollStartTimeRef.current = null
@@ -253,7 +276,7 @@ export function ETMapAnalysis() {
       }
       localStorage.removeItem(LOCALSTORAGE_KEY)
     }
-  }, [clearTrigger, setETMapImageOverlay, setETMapRequestId])
+  }, [clearTrigger, setETMapImageOverlay, setETMapRequestId, setEtmapAnalysisResult])
 
   // Check for saved request_id from localStorage on mount (don't auto-load)
   useEffect(() => {
@@ -322,6 +345,9 @@ export function ETMapAnalysis() {
             if (bounds) {
               setETMapImageOverlay(imageUrl, bounds)
             }
+            if (status.statistics) {
+              setEtmapAnalysisResult(status.statistics)
+            }
             toast.success('ET Map calculation complete!')
           } catch (imgError) {
             console.error('Failed to load ET Map image:', imgError)
@@ -349,7 +375,7 @@ export function ETMapAnalysis() {
     }
 
     poll()
-  }, [requestId, setETMapImageOverlay])
+  }, [requestId, setETMapImageOverlay, setEtmapAnalysisResult])
 
   // Helper to calculate total days in date range
   const calculateTotalDays = () => {
@@ -1201,6 +1227,18 @@ export function ETMapAnalysis() {
               <Share2 className="h-4 w-4 mr-2" />
               Share
             </Button>
+
+            {isCompleted && requestId && (
+              <Button
+                id="etmap-analyze-ai-btn"
+                variant="outline"
+                size="sm"
+                onClick={handleAnalyzeWithAI}
+              >
+                <Bot className="h-4 w-4 mr-2" />
+                Analyze with AI
+              </Button>
+            )}
 
             <Button
               variant="outline"
