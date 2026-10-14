@@ -25,6 +25,7 @@ _SEARCH_BASE = "https://ipm.ucanr.edu/PMG/selectpest.home.html"
 _AG_BASE     = "https://ipm.ucanr.edu"
 _TIMEOUT     = 10
 _CACHE_TTL   = 86400  # 24 hours
+_CACHE_MAX   = 500    # entries; cache is cleared when full (keys come from model-chosen args)
 
 # {(crop, pest): (timestamp, result_dict)}
 _cache: dict[tuple[str, str | None], tuple[float, dict]] = {}
@@ -206,5 +207,7 @@ def get_ipm_guidance(crop: str, pest: str | None = None) -> dict[str, Any]:
             return result
 
     result = _search_ipm(crop, pest)
+    if len(_cache) >= _CACHE_MAX:
+        _cache.clear()
     _cache[cache_key] = (now, result)
     return result

@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 # TTL cache for price responses: cache_key -> (monotonic_ts, result)
 _price_cache: dict[str, tuple[float, Any]] = {}
 _PRICE_CACHE_TTL = 1800  # 30 minutes
+_PRICE_CACHE_MAX = 500   # entries; cache is cleared when full (keys come from model-chosen args)
 
 _BASE    = "https://marsapi.ams.usda.gov/services/v1.2"
 _KEY     = os.environ.get("MARS_key", "")
@@ -183,6 +184,8 @@ def get_prices(commodity: str) -> dict[str, Any]:
                     "prices":            [_format_row(r) for r in matched[:8]],
                     "num_results":       len(matched),
                 }
+                if len(_price_cache) >= _PRICE_CACHE_MAX:
+                    _price_cache.clear()
                 _price_cache[cache_key] = (time.monotonic(), result)
                 return result
         except requests.exceptions.HTTPError as e:

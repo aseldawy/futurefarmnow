@@ -41,8 +41,14 @@ Usage:
 - For static file hosting, place files in the `../public_html` directory relative to this script.
 """
 
+import os
+import sys
+import traceback
+import uuid
+
 from flask import Flask, send_from_directory, jsonify
 from flask_cors import CORS
+from werkzeug.exceptions import HTTPException
 from soil_stats import soil_stats_bp
 from soil_sample import soil_sample_bp
 from ndvi_timeseries import ndvi_timeseries_bp
@@ -50,7 +56,18 @@ from app.et_map import etrawdata_bp
 from app.ai_assistant import ai_assistant_bp
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*", "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"], "allow_headers": "*"}})
+# Hard cap on request bodies: 4 MB chat image + context/history + multipart overhead
+app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024
+
+# Only the FFN frontends may call this backend from a browser (override with
+# a comma-separated CORS_ALLOWED_ORIGINS env var, e.g. to add http://localhost:3000)
+_ALLOWED_ORIGINS = [
+    o.strip() for o in os.environ.get(
+        "CORS_ALLOWED_ORIGINS",
+        "https://ffn.cs.ucr.edu,https://raptor.cs.ucr.edu,http://localhost:3000",
+    ).split(",") if o.strip()
+]
+CORS(app, resources={r"/*": {"origins": _ALLOWED_ORIGINS, "methods": ["GET", "POST", "OPTIONS"], "allow_headers": ["Content-Type"]}})
 
 # Register blueprints
 app.register_blueprint(soil_stats_bp)
@@ -59,16 +76,18 @@ app.register_blueprint(ndvi_timeseries_bp)
 app.register_blueprint(etrawdata_bp)
 app.register_blueprint(ai_assistant_bp)
 
-# Global error handler
+# Global error handler: full traceback is logged server-side only; clients get
+# a generic message plus a request ID that can be matched against the logs
 @app.errorhandler(Exception)
 def handle_exception(e):
-    import traceback
-    import sys
-    print(traceback.format_exc(), file=sys.stderr)
+    if isinstance(e, HTTPException):
+        # 404, 405, 413 etc. keep their status code
+        return jsonify({"error": e.name, "message": e.description}), e.code
+    request_id = uuid.uuid4().hex[:12]
+    print(f"[request_id={request_id}] {traceback.format_exc()}", file=sys.stderr)
     return jsonify({
         "error": "An unexpected error occurred",
-        "details": str(e),
-        "stack_trace": traceback.format_exc().split("\n")
+        "request_id": request_id,
     }), 500
 
 @app.route('/vectors.json', methods=['GET'])

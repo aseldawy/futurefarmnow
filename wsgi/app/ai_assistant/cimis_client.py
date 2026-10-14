@@ -34,6 +34,7 @@ _station_cache: list[dict] | None = None
 # TTL cache for daily data responses: key -> (monotonic_ts, result)
 _data_cache: dict[str, tuple[float, Any]] = {}
 _DATA_CACHE_TTL = 1800  # 30 minutes
+_DATA_CACHE_MAX = 500   # entries; cache is cleared when full (keys come from model-chosen args)
 
 
 # ---------------------------------------------------------------------------
@@ -176,6 +177,8 @@ def fetch_daily(
     }
 
     result = records, station_info
+    if len(_data_cache) >= _DATA_CACHE_MAX:
+        _data_cache.clear()
     _data_cache[cache_key] = (time.monotonic(), result)
     return result
 

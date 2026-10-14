@@ -10,9 +10,20 @@ interface Props {
   onToggleTool: (messageId: string, toolIndex: number) => void
 }
 
+// Only render model-returned source links that are well-formed https URLs
+function isSafeSourceUrl(url: unknown): url is string {
+  if (typeof url !== 'string') return false
+  try {
+    return new URL(url).protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
 export function ChatMessage({ message, onToggleTool }: Props) {
   const isUser = message.role === 'user'
   const isError = !!message.error
+  const safeSources = (message.sources ?? []).filter(isSafeSourceUrl)
 
   return (
     <div
@@ -90,10 +101,10 @@ export function ChatMessage({ message, onToggleTool }: Props) {
         )}
 
         {/* Web sources */}
-        {!isUser && message.sources && message.sources.length > 0 && (
+        {!isUser && safeSources.length > 0 && (
           <div id={`chat-sources-${message.id}`} className="text-[11px] text-muted-foreground space-y-0.5">
             <p className="font-medium">Sources</p>
-            {message.sources.slice(0, 3).map((url, i) => (
+            {safeSources.slice(0, 3).map((url, i) => (
               <a
                 key={i}
                 href={url}

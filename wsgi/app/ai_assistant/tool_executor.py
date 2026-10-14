@@ -14,6 +14,20 @@ from typing import Any
 
 import requests
 
+from .validation import (
+    CIMIS_MIN_DATE,
+    MAX_CIMIS_SPAN_DAYS,
+    MAX_NDVI_SPAN_DAYS,
+    NDVI_MIN_DATE,
+    validate_date_range,
+    validate_lat_lon,
+    validate_num_points,
+    validate_soil_depth,
+    validate_soil_layer,
+    validate_soil_layers,
+    validate_text_arg,
+)
+
 logger = logging.getLogger(__name__)
 
 # Base URL of this same Flask server — used to call existing endpoints
@@ -90,10 +104,18 @@ def execute_tool(
 # Individual tool implementations
 # ---------------------------------------------------------------------------
 
+def _invalid(message: str) -> dict:
+    return {"error": "invalid_arguments", "message": message}
+
+
 def _get_soil_stats(polygon_geojson: dict, args: dict) -> dict:
     """Call POST /soil/singlepolygon.json"""
-    layer = args.get("layer", "ph")
-    soildepth = args.get("soildepth", "0-5")
+    layer, err = validate_soil_layer(args.get("layer", "ph"))
+    if err:
+        return _invalid(err)
+    soildepth, err = validate_soil_depth(args.get("soildepth", "0-5"))
+    if err:
+        return _invalid(err)
 
     url = f"{_BASE_URL}/soil/singlepolygon.json"
     params = {"layer": layer, "soildepth": soildepth}
@@ -120,8 +142,12 @@ def _get_soil_stats(polygon_geojson: dict, args: dict) -> dict:
 
 def _get_ndvi_timeseries(polygon_geojson: dict, args: dict) -> dict:
     """Call POST /ndvi/singlepolygon.json"""
-    from_date = args.get("from_date", "")
-    to_date = args.get("to_date", "")
+    dates, err = validate_date_range(
+        args.get("from_date"), args.get("to_date"), NDVI_MIN_DATE, MAX_NDVI_SPAN_DAYS
+    )
+    if err:
+        return _invalid(err)
+    from_date, to_date = dates
 
     url = f"{_BASE_URL}/ndvi/singlepolygon.json"
     params = {"from": from_date, "to": to_date}
@@ -163,15 +189,16 @@ def _get_cimis_weather(args: dict) -> dict:
     """Fetch CIMIS daily weather/ET data for nearest station to lat/lon."""
     from .cimis_client import fetch_daily
 
-    lat        = float(args.get("lat", 0))
-    lon        = float(args.get("lon", 0))
-    start_date = args.get("start_date", "")
-    end_date   = args.get("end_date", "")
-
-    if not lat or not lon:
-        return {"error": "missing_location", "message": "Latitude and longitude are required for CIMIS data."}
-    if not start_date or not end_date:
-        return {"error": "missing_dates", "message": "start_date and end_date are required."}
+    location, err = validate_lat_lon(args.get("lat"), args.get("lon"))
+    if err:
+        return _invalid(err)
+    lat, lon = location
+    dates, err = validate_date_range(
+        args.get("start_date"), args.get("end_date"), CIMIS_MIN_DATE, MAX_CIMIS_SPAN_DAYS
+    )
+    if err:
+        return _invalid(err)
+    start_date, end_date = dates
 
     records, station = fetch_daily(lat, lon, start_date, end_date)
     if not records:
@@ -206,12 +233,13 @@ def _get_pest_disease_risk(args: dict) -> dict:
     from .cimis_client import last_n_days
     from .pest_risk import compute_risk
 
-    lat  = float(args.get("lat", 0))
-    lon  = float(args.get("lon", 0))
-    crop = args.get("crop")
-
-    if not lat or not lon:
-        return {"error": "missing_location", "message": "Latitude and longitude are required for pest risk."}
+    location, err = validate_lat_lon(args.get("lat"), args.get("lon"))
+    if err:
+        return _invalid(err)
+    lat, lon = location
+    crop, err = validate_text_arg(args.get("crop"), "crop", required=False)
+    if err:
+        return _invalid(err)
 
     records, station = last_n_days(lat, lon, n=30)
     if not records:
@@ -227,9 +255,9 @@ def _get_market_prices(args: dict) -> dict:
     """Fetch USDA MARS wholesale market prices for a CA commodity."""
     from .market_client import get_prices
 
-    commodity = args.get("commodity", "")
-    if not commodity:
-        return {"error": "missing_commodity", "message": "A commodity name is required."}
+    commodity, err = validate_text_arg(args.get("commodity"), "commodity")
+    if err:
+        return _invalid(err)
 
     return get_prices(commodity)
 
@@ -238,20 +266,27 @@ def _get_uc_ipm_guidance(args: dict) -> dict:
     """Fetch UC IPM pest management guidance for a crop/pest."""
     from .uc_ipm_client import get_ipm_guidance
 
-    crop = args.get("crop", "")
-    pest = args.get("pest")
-
-    if not crop:
-        return {"error": "missing_crop", "message": "A crop name is required."}
+    crop, err = validate_text_arg(args.get("crop"), "crop")
+    if err:
+        return _invalid(err)
+    pest, err = validate_text_arg(args.get("pest"), "pest", required=False)
+    if err:
+        return _invalid(err)
 
     return get_ipm_guidance(crop, pest)
 
 
 def _get_soil_sample_points(polygon_geojson: dict, args: dict) -> dict:
     """Call POST /soil/sample.json"""
-    num_points = int(args.get("num_points", 7))
-    layers = args.get("layers", ["ph", "om"])
-    soildepth = args.get("soildepth", "0-5")
+    num_points, err = validate_num_points(args.get("num_points", 7))
+    if err:
+        return _invalid(err)
+    layers, err = validate_soil_layers(args.get("layers", ["ph", "om"]))
+    if err:
+        return _invalid(err)
+    soildepth, err = validate_soil_depth(args.get("soildepth", "0-5"))
+    if err:
+        return _invalid(err)
 
     url = f"{_BASE_URL}/soil/sample.json"
     # layers is a repeatable query param

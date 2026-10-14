@@ -6,7 +6,8 @@ Endpoint:
 
 Security:
   - Prompt injection pre-scan (regex)
-  - Input size limits
+  - Input size limits (raw context/history capped before JSON parsing)
+  - Polygon GeoJSON validation (structure, validity, vertex count, area, region)
   - Magic-byte image validation
   - GEMINI_API_KEY never exposed in responses
 """
@@ -16,6 +17,8 @@ import json
 import logging
 
 from flask import Blueprint, request, jsonify
+
+from .validation import validate_lat_lon, validate_polygon
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +32,9 @@ MAX_MESSAGE_LENGTH = 2000
 MAX_HISTORY_TURNS = 20
 MAX_IMAGE_BYTES = 4 * 1024 * 1024      # 4 MB
 ALLOWED_IMAGE_MIMES = {"image/jpeg", "image/png", "image/webp"}
+
+MAX_CONTEXT_BYTES = 200 * 1024          # raw JSON size of the context field
+MAX_HISTORY_BYTES = 200 * 1024          # raw JSON size of the history field
 
 _VALID_ROLES = {"user", "model"}
 _HISTORY_CHAR_BUDGET = 12_000          # max total chars across all history turns
@@ -123,6 +129,11 @@ def chat():
 
     # ---- Parse context ----
     context_raw = request.form.get("context", "{}")
+    if len(context_raw) > MAX_CONTEXT_BYTES:
+        return jsonify({
+            "error": "invalid_input",
+            "message": "Map context is too large. Try clearing old analysis results or simplifying the drawn area.",
+        }), 413
     try:
         context = json.loads(context_raw)
         if not isinstance(context, dict):
@@ -130,8 +141,27 @@ def chat():
     except (json.JSONDecodeError, ValueError):
         context = {}
 
+    # ---- Validate polygon and map center ----
+    if context.get("polygonGeojson") is not None:
+        polygon, err = validate_polygon(context["polygonGeojson"])
+        if err:
+            return jsonify({"error": "invalid_input", "message": err}), 400
+        context["polygonGeojson"] = polygon
+    context["hasPolygon"] = context.get("polygonGeojson") is not None
+
+    center = context.get("mapCenter")
+    if center is not None:
+        coords, _ = (
+            validate_lat_lon(center[0], center[1])
+            if isinstance(center, list) and len(center) == 2
+            else (None, None)
+        )
+        context["mapCenter"] = list(coords) if coords else None
+
     # ---- Parse history ----
     history_raw = request.form.get("history", "[]")
+    if len(history_raw) > MAX_HISTORY_BYTES:
+        history_raw = "[]"   # oversized history: drop it rather than fail the turn
     try:
         history = json.loads(history_raw)
         if not isinstance(history, list):

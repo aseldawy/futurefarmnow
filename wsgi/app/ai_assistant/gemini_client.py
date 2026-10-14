@@ -21,6 +21,13 @@ from google import genai
 from google.genai import types
 from google.api_core.exceptions import NotFound as _CacheNotFound
 
+from .validation import is_https_url
+
+# Per-request tool budget: bounds how much backend work one chat turn can trigger
+MAX_TOOL_CALLS_PER_REQUEST = 6
+MAX_EXPENSIVE_CALLS_PER_REQUEST = 2
+_EXPENSIVE_TOOLS = {"get_ndvi_timeseries", "get_soil_sample_points"}
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -459,6 +466,7 @@ _KNOWN_CONTEXT_KEYS = {
 }
 
 _MAX_RESULT_CHARS = 3000   # max chars for pre-fetched soil/ndvi result strings
+_MAX_CONTEXT_BLOCK_CHARS = 8000  # hard cap on the whole <context> block sent to the model
 _WEATHER_DAYS_NO_POLYGON = 3  # cap forecast length when no polygon is drawn
 
 
@@ -567,8 +575,10 @@ def build_context_block(context: dict) -> str:
                 f"[{go}]"
             )
 
-    lines.append("</context>")
-    return "\n".join(lines)
+    body = "\n".join(lines)
+    if len(body) > _MAX_CONTEXT_BLOCK_CHARS:
+        body = body[:_MAX_CONTEXT_BLOCK_CHARS] + "\n[context truncated]"
+    return body + "\n</context>"
 
 
 # ---------------------------------------------------------------------------
@@ -605,7 +615,7 @@ def chat(
     client = _get_client()
     has_polygon = context.get("hasPolygon", False)
     map_center = context.get("mapCenter")
-    has_location = bool(map_center and len(map_center) == 2)
+    has_location = isinstance(map_center, list) and len(map_center) == 2
     if has_polygon:
         config = _build_config(client)
     elif has_location:
@@ -680,6 +690,7 @@ def chat(
             return _call(fresh_cfg)
 
     # Agentic loop: send → check for function calls → send results → repeat
+    tool_budget = {"total": 0, "expensive": 0}
     max_iterations = 5
     for _ in range(max_iterations):
         response = _generate(config)
@@ -691,7 +702,7 @@ def chat(
         if grounding:
             for chunk in (getattr(grounding, "grounding_chunks", None) or []):
                 web = getattr(chunk, "web", None)
-                if web and getattr(web, "uri", None):
+                if web and is_https_url(getattr(web, "uri", None)):
                     if web.uri not in sources:
                         sources.append(web.uri)
 
@@ -721,8 +732,21 @@ def chat(
             tool_name = fc.name
             tool_args = dict(fc.args)
 
-            logger.info("Executing tool: %s args=%s", tool_name, tool_args)
-            result = execute_tool(tool_name, tool_args, polygon_geojson)
+            tool_budget["total"] += 1
+            if tool_name in _EXPENSIVE_TOOLS:
+                tool_budget["expensive"] += 1
+            if (
+                tool_budget["total"] > MAX_TOOL_CALLS_PER_REQUEST
+                or tool_budget["expensive"] > MAX_EXPENSIVE_CALLS_PER_REQUEST
+            ):
+                logger.warning("Tool budget exceeded, skipping %s", tool_name)
+                result = {
+                    "error": "tool_budget_exceeded",
+                    "message": "Too many data lookups for one question. Answer with the data already retrieved.",
+                }
+            else:
+                logger.info("Executing tool: %s args=%s", tool_name, tool_args)
+                result = execute_tool(tool_name, tool_args, polygon_geojson)
 
             tool_calls_log.append({
                 "name": tool_name,
