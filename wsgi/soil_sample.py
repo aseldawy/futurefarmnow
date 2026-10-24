@@ -52,7 +52,7 @@ import sys
 import tempfile
 from io import StringIO
 from flask import Blueprint, request, jsonify, make_response
-from shapely.geometry import shape
+from shapely.geometry import shape, mapping
 from extract_points import *
 from choose_points import *
 from conf import SOIL_DATA_DIR, SOIL_LAYERS
@@ -134,13 +134,29 @@ def process_request(query_params, query_geometry):
     print(f"[SAMPLE_DEBUG] After output_from_attr: df shape={df.shape}, columns={list(df.columns)}", file=sys.stderr)
 
     if df.empty:
-        import shapely.geometry
         response = make_response(jsonify({
-            "query": shapely.geometry.mapping(query_geometry),
+            "query": mapping(query_geometry),
             "message": "No soil data found for the given geometry, depth, and layers.",
+            "hint": "The polygon may be too small to contain any soil raster pixel centers. Try a larger polygon.",
             "results": [],
             "statistics": {"layers": {}}
         }), 404)
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response
+
+    # The point-selection algorithm needs at least the requested number of
+    # distinct raster cells. Small polygons can overlap fewer cells than the
+    # requested sample size, which otherwise causes failures in PCA/KDTree.
+    if len(df) < num_points:
+        response = make_response(jsonify({
+            "query": mapping(query_geometry),
+            "error": "The polygon contains too few soil data cells for the requested sample size.",
+            "requested_points": num_points,
+            "available_points": len(df),
+            "hint": "Select a larger polygon or request fewer sample points."
+        }), 422)
         response.headers['Access-Control-Allow-Origin'] = '*'
         response.headers['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS'
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
@@ -153,9 +169,8 @@ def process_request(query_params, query_geometry):
     # Calculate statistics for the layers
     statistics = calculate_statistics(sample_df, df)
 
-    import shapely.geometry
     response_data = {
-        "query": shapely.geometry.mapping(query_geometry),
+        "query": mapping(query_geometry),
         "results": [{"x": row['x'], "y": row['y'], "id": index} for index, row in sample_df.iterrows()],
         "statistics": {
             "layers": statistics
